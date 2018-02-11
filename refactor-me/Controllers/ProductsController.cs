@@ -2,34 +2,44 @@
 using System.Net;
 using System.Web.Http;
 using refactor_me.Models;
+using refactor_me.Services;
+using System.Collections.Generic;
 
 namespace refactor_me.Controllers
 {
     [RoutePrefix("products")]
     public class ProductsController : ApiController
     {
+        private ProductsService productsService;
+        private ProductOptionsService productOptionsService;
+
+        public ProductsController()
+        {
+            productsService = new ProductsService();
+            productOptionsService = new ProductOptionsService();
+        }
+
         [Route]
         [HttpGet]
-        public Products GetAll()
+        public IEnumerable<Product> GetAll()
         {
-            return new Products();
+            return productsService.GetProducts();
         }
 
         [Route("name/{name}")]
         [HttpGet]
-        public Products SearchByName(string name)
+        public IEnumerable<Product> SearchByName(string name)
         {
-            return new Products(name);
+            return productsService.GetProductsByName(name);
         }
 
         [Route("{id}")]
         [HttpGet]
         public Product GetProduct(Guid id)
         {
-            var product = new Product(id);
-            if (product.IsNew)
+            var product = productsService.GetProductById(id);
+            if (product == null)
                 throw new HttpResponseException(HttpStatusCode.NotFound);
-
             return product;
         }
 
@@ -37,48 +47,39 @@ namespace refactor_me.Controllers
         [HttpPost]
         public void Create(Product product)
         {
-            product.Save();
+            productsService.Create(product);
         }
 
         [Route("{id}")]
         [HttpPut]
-        public void Update(Guid id, Product product)
+        public void Overwrite(Guid id, Product product)
         {
-            var orig = new Product(id)
-            {
-                Name = product.Name,
-                Description = product.Description,
-                Price = product.Price,
-                DeliveryPrice = product.DeliveryPrice
-            };
-
-            if (!orig.IsNew)
-                orig.Save();
+            productsService.Overwrite(id, product);
         }
 
         [Route("{id}")]
         [HttpDelete]
         public void Delete(Guid id)
         {
-            var product = new Product(id);
-            product.Delete();
+            productsService.Delete(id);
         }
 
         [Route("{productId}/options")]
         [HttpGet]
-        public ProductOptions GetOptions(Guid productId)
+        public IEnumerable<ProductOption> GetOptions(Guid productId)
         {
-            return new ProductOptions(productId);
+            return productOptionsService.GetProductOptions(productId);
         }
 
-        [Route("{productId}/options/{id}")]
+        [Route("{productId}/options/{optionId}")]
         [HttpGet]
-        public ProductOption GetOption(Guid productId, Guid id)
+        public ProductOption GetOption(Guid productId, Guid optionId)
         {
-            var option = new ProductOption(id);
-            if (option.IsNew)
-                throw new HttpResponseException(HttpStatusCode.NotFound);
+            ThrowIfIdPairInvalid(productId, optionId);
 
+            var option = productOptionsService.GetProductOptionById(optionId);
+            if (option == null)
+                throw new HttpResponseException(HttpStatusCode.NotFound);
             return option;
         }
 
@@ -86,30 +87,34 @@ namespace refactor_me.Controllers
         [HttpPost]
         public void CreateOption(Guid productId, ProductOption option)
         {
-            option.ProductId = productId;
-            option.Save();
+            productOptionsService.Create(productId, option);
         }
 
-        [Route("{productId}/options/{id}")]
+        [Route("{productId}/options/{optionId}")]
         [HttpPut]
-        public void UpdateOption(Guid id, ProductOption option)
+        public void OverwriteOption(Guid productId, Guid optionId, ProductOption option)
         {
-            var orig = new ProductOption(id)
-            {
-                Name = option.Name,
-                Description = option.Description
-            };
+            ThrowIfIdPairInvalid(productId, optionId);
 
-            if (!orig.IsNew)
-                orig.Save();
+            productOptionsService.Overwrite(optionId, option);
         }
 
-        [Route("{productId}/options/{id}")]
+        [Route("{productId}/options/{optionId}")]
         [HttpDelete]
-        public void DeleteOption(Guid id)
+        public void DeleteOption(Guid productId, Guid optionId)
         {
-            var opt = new ProductOption(id);
-            opt.Delete();
+            ThrowIfIdPairInvalid(productId, optionId);
+
+            productOptionsService.Delete(optionId, optionId);
+        }
+
+        private void ThrowIfIdPairInvalid(Guid productId, Guid optionId)
+        {
+            var optionExistsForGivenProduct = productOptionsService.ProductHasOption(productId, optionId);
+            if (!optionExistsForGivenProduct)
+            {
+                throw new HttpResponseException(HttpStatusCode.BadRequest);
+            }
         }
     }
 }
